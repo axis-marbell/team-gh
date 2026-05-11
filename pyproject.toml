@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "team-gh"
+version = "0.1.0"
+description = "TOON-shaped progressive GitHub search for agent teams"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "Axis"}
+]
+dependencies = []
+
+[project.scripts]
+team-gh = "team_gh.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["team_gh*"]

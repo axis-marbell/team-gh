@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# Local integration config. Do not commit real team/private repo lists.
+team-gh.local.toml
+.team-gh.toml
