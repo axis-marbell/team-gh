@@ -14,6 +14,11 @@ class GhTests(unittest.TestCase):
     def test_with_all_states_preserves_explicit_state(self):
         self.assertEqual(_with_all_states("agent memory is:open"), "agent memory is:open")
 
+    def test_qualify_query_does_not_inject_state_qualifiers(self):
+        query = _qualify_query("semantic memory", repos=["one/repo"], owners=[])
+        self.assertNotIn("is:open", query)
+        self.assertNotIn("is:closed", query)
+
 
 if __name__ == "__main__":
     unittest.main()
