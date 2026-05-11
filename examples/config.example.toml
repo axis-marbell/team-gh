@@ -1,0 +1,9 @@
+[defaults]
+limit = 8
+cache_ttl_seconds = 3600
+
+# Optional exclusions. Leave this empty to search every repository visible to
+# the authenticated gh user.
+exclude_repos = [
+  "example-org/example-archive"
+]
