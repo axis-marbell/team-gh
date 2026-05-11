@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "search":
             query = " ".join(args.query)
+            if not query.strip():
+                raise ValueError("empty or whitespace-only query (try team-gh search --help)")
             limit = args.limit or config.limit
             repos = list(args.repo or ())
             owners = list(args.owner or ())
@@ -74,7 +76,11 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(render_search(query, args.scope, searched, results, limit))
             return 0
         if args.command == "show":
+            if not args.target.strip():
+                raise ValueError("empty target (try team-gh show --help)")
             if args.path:
+                if not args.path.strip():
+                    raise ValueError("empty file path (try team-gh show --help)")
                 kind, source, excerpts = show_file(gh, args.target, args.path, lines=args.lines, ref=args.ref)
             else:
                 kind, source, excerpts = show_issue_or_pr(gh, args.target)

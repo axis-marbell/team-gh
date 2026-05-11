@@ -69,11 +69,11 @@ that set. Use `--repo` or `--owner` to narrow the search.
 - code/files on GitHub's indexed default branch
 - repository metadata
 
-Lexical issue/PR search explicitly adds `is:open is:closed` unless you provide
-your own state qualifier. Semantic and hybrid issue search avoid state
-qualifiers by default because GitHub's GraphQL semantic search already returns
-open and closed issues/PRs, while `is:open is:closed` can suppress semantic
-matches.
+Lexical issue/PR search runs separate open and closed state queries unless you
+provide your own state qualifier. Pull request searches also include a merged
+state query. Semantic and hybrid issue search avoid state qualifiers by default
+because GitHub's GraphQL semantic search already returns open and closed
+issues/PRs, while combined state qualifiers can suppress semantic matches.
 
 Code search uses GitHub's indexed default branch. For most team repositories
 that is `main`, but the legacy code search API does not expose a branch
