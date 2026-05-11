@@ -22,6 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--repo", action="append", default=None, help="Repository owner/name to search; repeatable")
     search_parser.add_argument("--limit", type=int, default=None)
     search_parser.add_argument("--refresh-repos", action="store_true", help="Refresh authenticated repo cache before searching")
+    search_parser.add_argument(
+        "--issue-search",
+        choices=["lexical", "semantic", "hybrid"],
+        default="lexical",
+        help="Issue/PR search mode. semantic/hybrid use GitHub GraphQL SearchType modes.",
+    )
 
     show_parser = sub.add_parser("show", help="Show a bounded source excerpt")
     show_parser.add_argument("target", help="owner/repo#123 or owner/repo for file mode")
@@ -55,7 +61,16 @@ def main(argv: list[str] | None = None) -> int:
                 if config.exclude_repos:
                     excluded = set(config.exclude_repos)
                     repo_catalog = [repo for repo in repo_catalog if repo.get("name") not in excluded]
-            searched, results = search(gh, query, args.scope, repos, owners, limit, repo_catalog=repo_catalog)
+            searched, results = search(
+                gh,
+                query,
+                args.scope,
+                repos,
+                owners,
+                limit,
+                repo_catalog=repo_catalog,
+                issue_search_mode=args.issue_search,
+            )
             sys.stdout.write(render_search(query, args.scope, searched, results, limit))
             return 0
         if args.command == "show":

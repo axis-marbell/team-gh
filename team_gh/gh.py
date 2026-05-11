@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import dataclass
 
 REPO_CHUNK_SIZE = 25
+GRAPHQL_REPO_CHUNK_SIZE = 20
 
 
 class GhError(RuntimeError):
@@ -52,7 +53,15 @@ class Gh:
     def search_issues(self, query: str, repos: list[str], owners: list[str], limit: int, prs: bool = False) -> list[dict]:
         if repos:
             return self._chunked_search_issues(query, repos, limit, prs=prs)
-        args = ["search", "prs" if prs else "issues", query, "--limit", str(limit), "--json", "number,title,url,state,repository,updatedAt"]
+        args = [
+            "search",
+            "prs" if prs else "issues",
+            _with_all_states(query),
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,url,state,repository,updatedAt",
+        ]
         for owner in owners:
             args.extend(["--owner", owner])
         data = self.run_json(args)
@@ -67,7 +76,7 @@ class Gh:
             args = [
                 "search",
                 "prs" if prs else "issues",
-                query,
+                _with_all_states(query),
                 "--limit",
                 str(max(1, limit - len(results))),
                 "--json",
@@ -78,6 +87,75 @@ class Gh:
             data = self.run_json(args)
             results.extend(list(data or []))
         return results[:limit]
+
+    def search_issues_graphql(
+        self,
+        query: str,
+        repos: list[str],
+        owners: list[str],
+        limit: int,
+        mode: str,
+        prs: bool = False,
+    ) -> list[dict]:
+        search_type = {
+            "semantic": "ISSUE_SEMANTIC",
+            "hybrid": "ISSUE_HYBRID",
+        }.get(mode)
+        if not search_type:
+            return self.search_issues(query, repos, owners, limit, prs=prs)
+        if repos:
+            return self._chunked_search_issues_graphql(query, repos, limit, search_type, prs=prs)
+        qualified_query = _qualify_query(query, repos=[], owners=owners)
+        return self._graphql_issue_search(qualified_query, limit, search_type, prs=prs)
+
+    def _chunked_search_issues_graphql(
+        self,
+        query: str,
+        repos: list[str],
+        limit: int,
+        search_type: str,
+        prs: bool = False,
+    ) -> list[dict]:
+        results: list[dict] = []
+        for start in range(0, len(repos), GRAPHQL_REPO_CHUNK_SIZE):
+            if len(results) >= limit:
+                break
+            chunk = repos[start : start + GRAPHQL_REPO_CHUNK_SIZE]
+            qualified_query = _qualify_query(query, repos=chunk, owners=[])
+            results.extend(self._graphql_issue_search(qualified_query, limit - len(results), search_type, prs=prs))
+        return results[:limit]
+
+    def _graphql_issue_search(self, query: str, limit: int, search_type: str, prs: bool = False) -> list[dict]:
+        graphql = """
+query($q: String!, $first: Int!, $type: SearchType!) {
+  search(query: $q, type: $type, first: $first) {
+    nodes {
+      ... on Issue {
+        __typename
+        number
+        title
+        url
+        state
+        updatedAt
+        repository { nameWithOwner }
+      }
+      ... on PullRequest {
+        __typename
+        number
+        title
+        url
+        state
+        updatedAt
+        repository { nameWithOwner }
+      }
+    }
+  }
+}
+"""
+        data = self.run_json(["api", "graphql", "-f", f"query={graphql}", "-F", f"q={query}", "-F", f"first={limit}", "-F", f"type={search_type}"])
+        nodes = (((data or {}).get("data") or {}).get("search") or {}).get("nodes") or []
+        wanted = "PullRequest" if prs else "Issue"
+        return [_graphql_node_to_search_item(node) for node in nodes if node.get("__typename") == wanted]
 
     def accessible_repos(self) -> list[dict]:
         pages = self.run_json_pages(
@@ -156,3 +234,29 @@ class Gh:
             raise GhError("GitHub API returned an unexpected file shape")
         encoded = str(data["content"]).replace("\n", "")
         return base64.b64decode(encoded).decode("utf-8", errors="replace")
+
+
+def _qualify_query(query: str, repos: list[str], owners: list[str]) -> str:
+    qualifiers = [f"repo:{repo}" for repo in repos] + [f"owner:{owner}" for owner in owners]
+    if not qualifiers:
+        return query
+    return f"{query} {' '.join(qualifiers)}"
+
+
+def _with_all_states(query: str) -> str:
+    lowered = query.lower()
+    state_terms = ("is:open", "is:closed", "state:open", "state:closed")
+    if any(term in lowered for term in state_terms):
+        return query
+    return f"{query} is:open is:closed"
+
+
+def _graphql_node_to_search_item(node: dict) -> dict:
+    return {
+        "number": node.get("number"),
+        "title": node.get("title", ""),
+        "url": node.get("url", ""),
+        "state": str(node.get("state", "")).lower(),
+        "updatedAt": node.get("updatedAt", ""),
+        "repository": {"nameWithOwner": (node.get("repository") or {}).get("nameWithOwner", "")},
+    }
