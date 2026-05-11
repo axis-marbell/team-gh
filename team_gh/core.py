@@ -183,21 +183,47 @@ def line_excerpt(text: str, spec: str | None, default_limit: int = 80) -> tuple[
 def show_issue_or_pr(gh: Gh, target: str) -> tuple[str, dict, list[dict]]:
     repo, number = parse_target(target)
     try:
-        item = gh.view_issue(repo, number, pr=False)
-        kind = "issue"
-    except GhError:
-        item = gh.view_issue(repo, number, pr=True)
-        kind = "pr"
+        item = gh.view_issue_ref(repo, number)
+    except GhError as exc:
+        if _is_not_found_error(exc):
+            raise ValueError(f"issue or PR #{number} not found in {repo}") from exc
+        raise
+    kind = "pr" if item.get("pull_request") else "issue"
+    if kind == "pr":
+        item = _prefer_pr_view(gh, repo, number, item)
     source = {
         "repo": repo,
         "ref": f"#{number}",
         "title": item.get("title", ""),
-        "state": item.get("state", ""),
-        "url": item.get("url", ""),
+        "state": str(item.get("state", "")).lower(),
+        "url": item.get("html_url") or item.get("url", ""),
     }
     body = excerpt_text(item.get("body", "") or "")
     excerpts = [{"section": "body", "text": body or "(empty body)"}]
     return kind, source, excerpts
+
+
+def _prefer_pr_view(gh: Gh, repo: str, number: int, fallback: dict) -> dict:
+    try:
+        item = gh.view_issue(repo, number, pr=True)
+    except GhError:
+        return {
+            "title": fallback.get("title", ""),
+            "state": fallback.get("state", ""),
+            "url": fallback.get("html_url", ""),
+            "body": fallback.get("body", ""),
+        }
+    return {
+        "title": item.get("title", ""),
+        "state": str(item.get("state", "")).lower(),
+        "url": item.get("url", ""),
+        "body": item.get("body", ""),
+    }
+
+
+def _is_not_found_error(exc: GhError) -> bool:
+    text = str(exc).lower()
+    return "not found" in text or "could not resolve" in text or "404" in text
 
 
 def show_file(gh: Gh, repo: str, path: str, lines: str | None = None, ref: str | None = None) -> tuple[str, dict, list[dict]]:

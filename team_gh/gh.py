@@ -53,19 +53,7 @@ class Gh:
     def search_issues(self, query: str, repos: list[str], owners: list[str], limit: int, prs: bool = False) -> list[dict]:
         if repos:
             return self._chunked_search_issues(query, repos, limit, prs=prs)
-        args = [
-            "search",
-            "prs" if prs else "issues",
-            _with_all_states(query),
-            "--limit",
-            str(limit),
-            "--json",
-            "number,title,url,state,repository,updatedAt",
-        ]
-        for owner in owners:
-            args.extend(["--owner", owner])
-        data = self.run_json(args)
-        return list(data or [])
+        return self._state_search_issues(query, [], owners, limit, prs=prs)
 
     def _chunked_search_issues(self, query: str, repos: list[str], limit: int, prs: bool = False) -> list[dict]:
         results: list[dict] = []
@@ -73,19 +61,45 @@ class Gh:
             if len(results) >= limit:
                 break
             chunk = repos[start : start + REPO_CHUNK_SIZE]
+            results.extend(self._state_search_issues(query, chunk, [], limit - len(results), prs=prs))
+        return results[:limit]
+
+    def _state_search_issues(
+        self,
+        query: str,
+        repos: list[str],
+        owners: list[str],
+        limit: int,
+        prs: bool = False,
+    ) -> list[dict]:
+        results: list[dict] = []
+        seen: set[tuple[str, int]] = set()
+        for state_query in _state_queries(query, prs=prs):
+            if len(results) >= limit:
+                break
             args = [
                 "search",
                 "prs" if prs else "issues",
-                _with_all_states(query),
+                state_query,
                 "--limit",
                 str(max(1, limit - len(results))),
                 "--json",
                 "number,title,url,state,repository,updatedAt",
             ]
-            for repo in chunk:
+            for repo in repos:
                 args.extend(["--repo", repo])
+            for owner in owners:
+                args.extend(["--owner", owner])
             data = self.run_json(args)
-            results.extend(list(data or []))
+            for item in list(data or []):
+                repo_name = item.get("repository", {}).get("nameWithOwner", "")
+                key = (repo_name, int(item.get("number", -1)))
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append(item)
+                if len(results) >= limit:
+                    break
         return results[:limit]
 
     def search_issues_graphql(
@@ -225,6 +239,12 @@ query($q: String!, $first: Int!, $type: SearchType!) {
             raise GhError("GitHub CLI returned an unexpected issue shape")
         return data
 
+    def view_issue_ref(self, repo: str, number: int) -> dict:
+        data = self.run_json(["api", f"repos/{repo}/issues/{number}"])
+        if not isinstance(data, dict):
+            raise GhError("GitHub API returned an unexpected issue shape")
+        return data
+
     def file_content(self, repo: str, path: str, ref: str | None = None) -> str:
         endpoint = f"repos/{repo}/contents/{path}"
         if ref:
@@ -243,12 +263,19 @@ def _qualify_query(query: str, repos: list[str], owners: list[str]) -> str:
     return f"{query} {' '.join(qualifiers)}"
 
 
-def _with_all_states(query: str) -> str:
+def _has_state_qualifier(query: str) -> bool:
     lowered = query.lower()
-    state_terms = ("is:open", "is:closed", "state:open", "state:closed")
-    if any(term in lowered for term in state_terms):
-        return query
-    return f"{query} is:open is:closed"
+    state_terms = ("is:open", "is:closed", "is:merged", "state:open", "state:closed", "state:merged")
+    return any(term in lowered for term in state_terms)
+
+
+def _state_queries(query: str, prs: bool = False) -> list[str]:
+    if _has_state_qualifier(query):
+        return [query]
+    states = ["is:open", "is:closed"]
+    if prs:
+        states.append("is:merged")
+    return [f"{query} {state}" for state in states]
 
 
 def _graphql_node_to_search_item(node: dict) -> dict:
