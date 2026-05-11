@@ -1,8 +1,9 @@
 # team-gh
 
-`team-gh` is a small agent-facing GitHub search CLI. It wraps the authenticated
-GitHub CLI and returns compact TOON-like output for progressive disclosure
-across repositories, issues, pull requests, code, and markdown.
+`team-gh` is an agent-facing GitHub search CLI. It searches the repositories
+visible to the authenticated GitHub CLI user and returns compact TOON-like
+results for progressive disclosure across issues, pull requests, code, files,
+markdown, and repository metadata.
 
 It is not an agent memory replacement. It is a discovery layer for finding the
 source artifacts an agent should read before making a team-wide claim.
@@ -20,85 +21,63 @@ Requirements:
 - an authenticated `gh` session with access to the repositories you want to
   search
 
-## Commands
+## Quick Start
 
-Search across every repository visible to the authenticated GitHub user. By
-default, `--scope all` searches issues, pull requests, code, and repository
-metadata. GitHub issue/PR search explicitly adds `is:open is:closed` unless
-you provide your own state qualifier in lexical mode. Semantic and hybrid issue
-search avoid state qualifiers by default because GitHub's GraphQL semantic
-search already returns open and closed issues/PRs, while `is:open is:closed`
-can suppress semantic matches. Code search uses GitHub's indexed default branch;
-for most team repositories that is `main`, but the legacy code search API does
-not expose a branch selector.
+Refresh the local repo cache and confirm the CLI can see your GitHub surface:
 
 ```bash
-team-gh search "residual output substrate ladder" --scope all --limit 8
+team-gh repos --limit 20 --refresh
 ```
 
-The default search path discovers accessible repositories through `gh api`,
-caches the compact repo list locally, and refreshes it when the cache is stale.
-Use `--refresh-repos` to force a refresh.
-
-Narrow a search when needed:
+Search every visible repository with compact output:
 
 ```bash
-team-gh search "residual output" --repo owner/repo --scope issues
-team-gh search "agent memory" --owner example-org --scope all
+team-gh search "agent memory" --scope all --limit 8 --refresh-repos
 ```
 
-Use GitHub's GraphQL semantic or hybrid issue search when lexical terms are too
-narrow. These modes apply to issues and pull requests; code search remains
-GitHub's lexical code search.
+Expand one result:
 
 ```bash
-team-gh search "where did we discuss residual memory" --scope issues --issue-search hybrid
-team-gh search "agent onboarding search tool" --scope all --issue-search semantic
+team-gh show example-org/example-repo#123
+team-gh show example-org/example-repo README.md --lines 1:80
 ```
 
-Show a bounded source excerpt for an issue or pull request:
+Narrow a search when you know the likely owner or repo:
 
 ```bash
-team-gh show owner/repo#123
+team-gh search "residual output" --repo example-org/example-repo --scope all
+team-gh search "agent onboarding" --owner example-org --scope issues
 ```
 
-Show a bounded source excerpt for a file:
+Use semantic or hybrid issue search for conceptual queries:
 
 ```bash
-team-gh show owner/repo path/to/file.md --lines 40:120
+team-gh search "where did we discuss agent onboarding" --scope issues --issue-search hybrid
+team-gh search "memory resolver design" --repo example-org/example-repo --scope prs --issue-search semantic
 ```
 
-List repositories visible to the authenticated GitHub user:
+## Search Defaults
 
-```bash
-team-gh repos --limit 50 --refresh
-```
+By default, `team-gh search` discovers all repositories visible to the
+authenticated `gh` user, caches that compact repo list locally, and searches
+that set. Use `--repo` or `--owner` to narrow the search.
 
-## Output Shape
+`--scope all` searches:
 
-Search returns references and short matches:
+- issues
+- pull requests
+- code/files on GitHub's indexed default branch
+- repository metadata
 
-```toon
-team_gh_search
-  query: "residual output substrate ladder"
-  scope: all
-  returned: 2
-  truncated: false
+Lexical issue/PR search explicitly adds `is:open is:closed` unless you provide
+your own state qualifier. Semantic and hybrid issue search avoid state
+qualifiers by default because GitHub's GraphQL semantic search already returns
+open and closed issues/PRs, while `is:open is:closed` can suppress semantic
+matches.
 
-  result[1]
-    kind: issue
-    repo: owner/repo
-    ref: #123
-    title: "Residual handling"
-    state: open
-    updated: 2026-05-11T12:00:00Z
-    url: https://github.com/owner/repo/issues/123
-    why: "Matched issue title/body/comments through GitHub search."
-    action: team-gh show owner/repo#123
-```
-
-Use `team-gh show` to fetch source excerpts. Search output is intentionally
-small so agents can decide what to expand.
+Code search uses GitHub's indexed default branch. For most team repositories
+that is `main`, but the legacy code search API does not expose a branch
+selector.
 
 ## Progressive Disclosure
 
@@ -108,8 +87,121 @@ The CLI is designed around three disclosure levels:
 2. `team-gh show` returns bounded source excerpts for one selected result.
 3. Full source stays behind GitHub URLs or explicit file expansion.
 
-This keeps default search output small enough for agents to scan without
-turning every search into a large context dump.
+Start broad, then narrow. In local testing, all-repo searches are useful for
+known words, file names, and repo metadata. Semantic/hybrid searches are most
+useful after narrowing to a likely repo or owner, because very broad conceptual
+queries can return sparse results through GitHub's semantic API.
+
+## Output Shape
+
+Search returns references and short matches:
+
+```toon
+team_gh_search
+  query: "agent memory"
+  scope: all
+  searched: "repos=20 owners=0 kinds=issues,prs,code,repos issue_search=hybrid"
+  returned: 2
+  truncated: false
+
+  result[1]
+    kind: issue
+    repo: example-org/example-repo
+    ref: #123
+    title: "Memory resolver design"
+    state: open
+    updated: 2026-05-11T12:00:00Z
+    url: https://github.com/example-org/example-repo/issues/123
+    why: "Matched issue title/body/comments through GitHub hybrid search."
+    action: "team-gh show example-org/example-repo#123"
+```
+
+Use `team-gh show` to fetch source excerpts. Search output is intentionally
+small so agents can decide what to expand.
+
+## Self-Test For Agents
+
+Every agent adopting this tool should run its own self-test and record the exact
+commands that worked in its local instructions or skill.
+
+Recommended self-test:
+
+```bash
+team-gh repos --limit 20 --refresh
+team-gh search "README" --scope code --limit 8 --refresh-repos
+team-gh search "agent memory" --scope all --limit 8 --issue-search hybrid
+team-gh search "agent memory" --repo example-org/example-repo --scope all --issue-search hybrid
+team-gh show example-org/example-repo#123
+team-gh show example-org/example-repo README.md --lines 1:80
+```
+
+Replace the example repo and issue with real results from your own first search.
+Do not copy another agent's private repo list into your config or docs.
+
+After testing, the agent should update its own substrate:
+
+- Add a short instruction to `AGENTS.md`, `CLAUDE.md`, `.rules`, or equivalent.
+- Add a small skill such as `team-github-search`.
+- Record exact commands that worked for that agent.
+- State when to use the tool: before team-wide claims, repo discovery, issue
+  archaeology, cross-repo duplicate checks, and onboarding to unfamiliar team
+  repos.
+- State when not to use it: as a replacement for memory, as proof without
+  `team-gh show`, or for secrets/config discovery.
+
+## Skill Template
+
+Agents can adapt this as `.codex/skills/team-github-search/SKILL.md` or the
+equivalent skill file for their substrate:
+
+```md
+---
+name: team-github-search
+description: Use when searching across team GitHub repos, issues, PRs, markdown, and files before making a team-wide or cross-repo claim.
+---
+
+# Team GitHub Search
+
+Use `team-gh` for source-backed GitHub discovery. It does not replace memory.
+
+## When To Use
+
+- Before claiming where a team decision lives.
+- Before creating a duplicate issue or repo feature.
+- When onboarding to an unfamiliar team repo.
+- When searching issues, PRs, README files, AGENTS/CLAUDE docs, or markdown
+  across all repos visible to this agent.
+
+## Workflow
+
+1. Start broad:
+
+   ```bash
+   team-gh search "<topic>" --scope all --limit 8 --refresh-repos
+   ```
+
+2. Narrow when likely repo or owner is known:
+
+   ```bash
+   team-gh search "<topic>" --repo example-org/example-repo --scope all --issue-search hybrid
+   ```
+
+3. Expand source before acting:
+
+   ```bash
+   team-gh show example-org/example-repo#123
+   team-gh show example-org/example-repo README.md --lines 1:80
+   ```
+
+4. Cite the issue, PR, file, or URL that established the fact.
+
+## Local Notes
+
+Add this agent's tested commands here:
+
+- `<command that worked>`
+- `<command that worked>`
+```
 
 ## Configuration
 
