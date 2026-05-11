@@ -25,6 +25,7 @@ def search(
     owners: list[str],
     limit: int,
     repo_catalog: list[dict] | None = None,
+    issue_search_mode: str = "lexical",
 ) -> tuple[str, list[dict]]:
     kinds = ["issues", "prs", "code", "repos"] if scope == "all" else [scope]
     per_kind = max(1, math.ceil(limit / len(kinds)))
@@ -35,9 +36,21 @@ def search(
         remaining = limit - len(results)
         count = min(per_kind, remaining)
         if kind == "issues":
-            results.extend(_issue_results(gh.search_issues(query, repos, owners, count, prs=False), pr=False))
+            results.extend(
+                _issue_results(
+                    gh.search_issues_graphql(query, repos, owners, count, issue_search_mode, prs=False),
+                    pr=False,
+                    mode=issue_search_mode,
+                )
+            )
         elif kind == "prs":
-            results.extend(_issue_results(gh.search_issues(query, repos, owners, count, prs=True), pr=True))
+            results.extend(
+                _issue_results(
+                    gh.search_issues_graphql(query, repos, owners, count, issue_search_mode, prs=True),
+                    pr=True,
+                    mode=issue_search_mode,
+                )
+            )
         elif kind == "code":
             results.extend(_code_results(gh.search_code(query, repos, owners, count)))
         elif kind == "repos":
@@ -47,11 +60,11 @@ def search(
                 results.extend(_repo_results(gh.search_repos(query, owners, count)))
         else:
             raise ValueError(f"unknown scope: {scope}")
-    searched = f"repos={len(repos)} owners={len(owners)} kinds={','.join(kinds)}"
+    searched = f"repos={len(repos)} owners={len(owners)} kinds={','.join(kinds)} issue_search={issue_search_mode}"
     return searched, results[:limit]
 
 
-def _issue_results(items: list[dict], pr: bool) -> list[dict]:
+def _issue_results(items: list[dict], pr: bool, mode: str = "lexical") -> list[dict]:
     kind = "pr" if pr else "issue"
     output = []
     for item in items:
@@ -66,7 +79,7 @@ def _issue_results(items: list[dict], pr: bool) -> list[dict]:
                 "state": item.get("state", ""),
                 "updated": item.get("updatedAt", ""),
                 "url": item.get("url", ""),
-                "why": f"Matched {kind} title/body/comments through GitHub search.",
+                "why": f"Matched {kind} title/body/comments through GitHub {mode} search.",
                 "action": f"team-gh show {repo}#{number}",
             }
         )

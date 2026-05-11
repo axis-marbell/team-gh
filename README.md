@@ -24,8 +24,11 @@ Requirements:
 
 Search across every repository visible to the authenticated GitHub user. By
 default, `--scope all` searches issues, pull requests, code, and repository
-metadata. GitHub issue/PR search includes open and closed items unless you
-explicitly narrow the query. Code search uses GitHub's indexed default branch;
+metadata. GitHub issue/PR search explicitly adds `is:open is:closed` unless
+you provide your own state qualifier in lexical mode. Semantic and hybrid issue
+search avoid state qualifiers by default because GitHub's GraphQL semantic
+search already returns open and closed issues/PRs, while `is:open is:closed`
+can suppress semantic matches. Code search uses GitHub's indexed default branch;
 for most team repositories that is `main`, but the legacy code search API does
 not expose a branch selector.
 
@@ -42,6 +45,15 @@ Narrow a search when needed:
 ```bash
 team-gh search "residual output" --repo owner/repo --scope issues
 team-gh search "agent memory" --owner example-org --scope all
+```
+
+Use GitHub's GraphQL semantic or hybrid issue search when lexical terms are too
+narrow. These modes apply to issues and pull requests; code search remains
+GitHub's lexical code search.
+
+```bash
+team-gh search "where did we discuss residual memory" --scope issues --issue-search hybrid
+team-gh search "agent onboarding search tool" --scope all --issue-search semantic
 ```
 
 Show a bounded source excerpt for an issue or pull request:

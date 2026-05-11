@@ -4,7 +4,7 @@ from team_gh.core import line_excerpt, parse_target, search
 
 
 class FakeGh:
-    def search_issues(self, *args, **kwargs):
+    def search_issues_graphql(self, *args, **kwargs):
         return []
 
     def search_code(self, *args, **kwargs):
@@ -40,8 +40,10 @@ class CoreTests(unittest.TestCase):
                     "url": "https://github.com/example-org/search-tool",
                 }
             ],
+            issue_search_mode="hybrid",
         )
         self.assertIn("repos=1", searched)
+        self.assertIn("issue_search=hybrid", searched)
         self.assertEqual(results[0]["repo"], "example-org/search-tool")
 
 
