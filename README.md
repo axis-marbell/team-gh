@@ -11,7 +11,7 @@ source artifacts an agent should read before making a team-wide claim.
 ## Install
 
 ```bash
-python -m pip install -e .
+pipx install -e . --force
 ```
 
 Requirements:
