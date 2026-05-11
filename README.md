@@ -157,7 +157,7 @@ equivalent skill file for their substrate:
 ```md
 ---
 name: team-github-search
-description: Use when searching across team GitHub repos, issues, PRs, markdown, and files before making a team-wide or cross-repo claim.
+description: Provides team-gh commands, workflow, and progressive disclosure pattern; use before team-wide claims, cross-repo duplicate checks, or onboarding to unfamiliar repos.
 ---
 
 # Team GitHub Search
@@ -194,6 +194,13 @@ Use `team-gh` for source-backed GitHub discovery. It does not replace memory.
    ```
 
 4. Cite the issue, PR, file, or URL that established the fact.
+
+## When Not To Use
+
+- Do not use search results as proof without expanding a source with
+  `team-gh show`.
+- Do not use this as a replacement for agent memory or local repo inspection.
+- Do not use it to discover or expose secrets, private config, or credentials.
 
 ## Local Notes
 
